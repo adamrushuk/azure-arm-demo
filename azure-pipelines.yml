@@ -1,0 +1,61 @@
+name: $(rev:r)
+
+trigger:
+  branches:
+    include:
+    - master
+
+stages:
+
+- stage: build
+  jobs:
+
+  - job:
+    displayName: Publish Artifacts
+    pool:
+      vmImage: vs2017-win2016
+    continueOnError: false
+    steps:
+
+    - checkout: self
+      persistCredentials: true
+
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publish ARM Template'
+      inputs:
+        pathtoPublish: 'infrastructure'
+        artifactName: 'infrastructure'
+
+- stage: deploy
+  jobs:
+
+  - deployment:
+    displayName: Deploy Dev
+    pool:
+      vmImage: vs2017-win2016
+    environment: 'dev'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+
+          - task: AzureResourceGroupDeployment@2
+            displayName: 'Deploy ARM Template'
+            inputs:
+              azureSubscription: 'Sonarqube-Azure'
+              action: 'Create Or Update Resource Group'
+              resourceGroupName: $(siteName)-rg
+              location: $(location)
+              templateLocation: 'Linked artifact'
+              csmFile: '$(Pipeline.Workspace)\infrastructure\sonarqube.json'
+              csmParametersFile: '$(Pipeline.Workspace)\infrastructure\sonarqube.parameters.json'
+              overrideParameters: '
+                -siteName $(siteName)
+                -sqlServerAdministratorUsername $(sqlServerAdministratorUsername)
+                -sqlServerAdministratorPassword $(sqlServerAdministratorPassword)
+                -servicePlanCapacity $(servicePlanCapacity)
+                -servicePlanPricingTier $(servicePlanPricingTier)
+                -sqlDatabaseSkuName $(sqlDatabaseSkuName)
+                -location $(location)
+              '
+              deploymentMode: 'Incremental'
